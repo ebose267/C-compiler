@@ -740,7 +740,6 @@
 
 <div class="app">
 
-  <!-- TOP BAR -->
   <header class="topbar">
     <div class="topbar-left">
       <a href="https://learn.alixbc.com.ng" class="logo-mark">
@@ -772,10 +771,8 @@
     </div>
   </header>
 
-  <!-- WORKSPACE -->
   <main class="workspace" id="workspace">
 
-    <!-- LEFT: EDITOR -->
     <section class="editor-panel" id="editorPane">
       <div class="panel-header">
         <div class="panel-title">
@@ -811,7 +808,6 @@
       </div>
     </section>
 
-    <!-- RIGHT: OUTPUT -->
     <section class="output-panel" id="outputPane">
       <div class="output-tabs">
         <button class="output-tab active" onclick="switchOutputTab('terminal', this)">Terminal</button>
@@ -832,7 +828,7 @@
         </div>
         <div class="term-block">
           <div class="term-line">
-            <span class="term-text dim">Powered by Alix AI Engine · C11 mode · Ready</span>
+            <span class="term-text dim">Powered by GCC Backend · Ready</span>
           </div>
           <div class="term-line">
             <span class="term-text dim">Press ▶ Run or Ctrl+Enter to execute</span>
@@ -859,7 +855,6 @@
       </div>
     </section>
 
-    <!-- EXAMPLES PANE (hidden by default) -->
     <section class="editor-panel examples-panel" id="examplesPane" style="display:none;">
       <div class="panel-header">
         <div class="panel-title"><span class="file-icon">◈</span> Example Programs</div>
@@ -867,7 +862,6 @@
       <div style="padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;" id="examplesList"></div>
     </section>
 
-    <!-- INFO PANE (hidden by default) -->
     <section class="editor-panel info-panel" id="infoPane" style="display:none;">
       <div class="panel-header">
         <div class="panel-title"><span class="file-icon">◈</span> Keyboard Shortcuts</div>
@@ -885,7 +879,7 @@
         <div class="info-section">
           <h3>About</h3>
           <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);line-height:1.9;">
-            The Alix C Compiler uses an AI execution engine to compile and run your C code with high accuracy. Supports standard C libraries: stdio.h, stdlib.h, string.h, math.h, and more.<br/><br/>
+            The Alix C Compiler uses the open-source Piston code execution API. It runs a genuine GCC compiler in a secure Linux container on the backend.<br/><br/>
             <span style="color:var(--gold)">learn.alixbc.com.ng</span>
           </div>
         </div>
@@ -894,7 +888,6 @@
 
   </main>
 
-  <!-- STATUS BAR -->
   <footer class="statusbar">
     <div class="statusbar-left">
       <span class="brand">ALIX</span>
@@ -1296,7 +1289,7 @@ document.getElementById('cStd').addEventListener('change', () => {
 });
 
 // ═══════════════════════════════════════════
-//  RUN CODE via Gemini API
+//  RUN CODE via Piston API (Real GCC Backend)
 // ═══════════════════════════════════════════
 let isRunning = false;
 
@@ -1310,18 +1303,13 @@ async function runCode() {
   const runBtn = document.getElementById('runBtn');
   const overlay = document.getElementById('loadingOverlay');
   const term = document.getElementById('terminal');
-  const std = document.getElementById('cStd').value;
-  const stdin = document.getElementById('stdinInput').value.trim();
+  const stdin = document.getElementById('stdinInput').value;
 
   runBtn.classList.add('loading');
   runBtn.innerHTML = '<span class="run-icon">⟳</span> Running...';
   overlay.classList.add('active');
 
-  const steps = ['Parsing...', 'Compiling...', 'Linking...', 'Executing...'];
-  let stepI = 0;
-  const stepInterval = setInterval(() => {
-    if (stepI < steps.length) document.getElementById('loaderText').textContent = steps[stepI++];
-  }, 400);
+  document.getElementById('loaderText').textContent = 'Compiling...';
 
   // Clear terminal
   term.innerHTML = '';
@@ -1355,200 +1343,120 @@ async function runCode() {
   }
 
   // Header
-  addLine(`[ alix-cc ] ${timestamp} · ${std}`, 'gold');
+  addLine(`[ alix-cc ] ${timestamp} · GCC Backend`, 'gold');
   addSeparator();
 
   try {
-    const systemPrompt = `You are a precise C compiler and runtime environment simulator. When given C source code, you must:
-
-1. Analyze the code for compilation errors and warnings (like GCC would, with line numbers and error codes)
-2. If it compiles, execute it and produce exact output
-3. Handle stdin input if provided
-
-Be extremely accurate. Simulate GCC behavior. Handle printf format strings precisely. If there's a runtime error (segfault, division by zero), report it in stderr and set exit_code accordingly.`;
-
-    const userPrompt = `C Standard: ${std}
-stdin: ${stdin || '(none)'}
-
-Source code:
-\`\`\`c
-${code}
-\`\`\``;
-
-    // Gemini API Setup
-    const apiKey = ""; // Execution environment injects this
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-    // Payload configured for Structured JSON Output matching the expected schema
+    // Prepare Piston API payload (Public open-source API, NO API keys needed)
     const payload = {
-        contents: [{ parts: [{ text: userPrompt }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: "OBJECT",
-                properties: {
-                    compilation: {
-                        type: "OBJECT",
-                        properties: {
-                            success: { type: "BOOLEAN" },
-                            warnings: { type: "ARRAY", items: { type: "OBJECT", properties: { line: { type: "NUMBER" }, message: { type: "STRING" }, code: { type: "STRING" } } } },
-                            errors: { type: "ARRAY", items: { type: "OBJECT", properties: { line: { type: "NUMBER" }, message: { type: "STRING" }, code: { type: "STRING" } } } },
-                            time_ms: { type: "NUMBER" }
-                        }
-                    },
-                    execution: {
-                        type: "OBJECT",
-                        properties: {
-                            ran: { type: "BOOLEAN" },
-                            stdout: { type: "STRING" },
-                            stderr: { type: "STRING" },
-                            exit_code: { type: "NUMBER" },
-                            time_ms: { type: "NUMBER" }
-                        }
-                    },
-                    analysis: {
-                        type: "OBJECT",
-                        properties: {
-                            complexity: { type: "STRING" },
-                            memory_notes: { type: "STRING" },
-                            suggestions: { type: "ARRAY", items: { type: "STRING" } },
-                            functions_defined: { type: "ARRAY", items: { type: "STRING" } },
-                            headers_used: { type: "ARRAY", items: { type: "STRING" } }
-                        }
-                    }
-                }
-            }
+      language: "c",
+      version: "*", // Uses the latest available GCC
+      files: [
+        {
+          name: "main.c",
+          content: code
         }
+      ],
+      stdin: stdin || "",
+      args: [],
+      compile_timeout: 10000,
+      run_timeout: 3000,
+      compile_memory_limit: -1,
+      run_memory_limit: -1
     };
 
-    // Exponential Backoff implementation
-    const delays = [1000, 2000, 4000, 8000, 16000];
-    let responseData = null;
-    
-    for (let i = 0; i <= delays.length; i++) {
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            responseData = await response.json();
-            break; // Success, exit retry loop
-        } catch (err) {
-            if (i === delays.length) throw err; // Throw on final failure
-            await new Promise(r => setTimeout(r, delays[i])); // Wait and retry
-        }
-    }
+    document.getElementById('loaderText').textContent = 'Executing...';
 
-    clearInterval(stepInterval);
+    const response = await fetch('https://emkc.org/api/v2/piston/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-    // Extract text block containing JSON
-    const textResponse = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!textResponse) throw new Error("Invalid format received from the compiler engine.");
-    
-    const result = JSON.parse(textResponse);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const result = await response.json();
 
-    // ─── COMPILATION RESULT ───
-    const comp = result.compilation;
-    const compTime = comp.time_ms || Math.floor(Math.random() * 80 + 20);
+    // Check Compilation
+    const comp = result.compile;
+    const run = result.run;
 
-    if (comp.errors && comp.errors.length > 0) {
-      addLine(`✗  Compilation FAILED  (${compTime}ms)`, 'error');
+    // Note: For C, Piston compiles first. If compile fails, run won't exist or will be empty.
+    if (comp && comp.code !== 0) {
+      addLine(`✗  Compilation FAILED`, 'error');
       addSeparator();
-      comp.errors.forEach(e => {
-        addPromptLine('✗', `main.c:${e.line}:  error: ${e.message}`, 'error');
-        if (e.code) addLine(`   [${e.code}]`, 'dim');
-      });
-      if (comp.warnings && comp.warnings.length > 0) {
-        addSeparator();
-        comp.warnings.forEach(w => {
-          addPromptLine('⚠', `main.c:${w.line}: warning: ${w.message}`, 'warning');
+      if (comp.stderr) {
+        comp.stderr.split('\n').forEach(line => {
+          if(line.trim()) addLine(line, 'error');
         });
       }
       document.getElementById('statusDot').style.background = 'var(--red)';
-      document.getElementById('statusText').textContent = `Error · ${comp.errors.length} error(s)`;
+      document.getElementById('statusText').textContent = `Error · Exit ${comp.code}`;
     } else {
-      // Warnings
-      if (comp.warnings && comp.warnings.length > 0) {
-        comp.warnings.forEach(w => {
-          addPromptLine('⚠', `main.c:${w.line}: warning: ${w.message}`, 'warning');
+      // Compiled OK
+      if (comp && comp.stderr) {
+        // Warnings might be here
+        comp.stderr.split('\n').forEach(line => {
+          if(line.trim()) addLine(line, 'warning');
         });
         addSeparator();
       }
 
-      addLine(`✓  Compiled OK  (${compTime}ms)`, 'success');
+      addLine(`✓  Compiled OK`, 'success');
       addSeparator();
 
-      // Execution
-      const exec = result.execution;
-      const execTime = exec.time_ms || Math.floor(Math.random() * 15 + 2);
-
-      if (exec.ran) {
+      if (run) {
         if (stdin) {
           addLine(`» stdin: ${stdin}`, 'dim');
           addSeparator();
         }
 
-        if (exec.stdout) {
-          exec.stdout.split('\n').forEach(line => {
+        if (run.stdout) {
+          run.stdout.split('\n').forEach(line => {
             if (line !== undefined && line !== "") addLine(line, '');
           });
         }
 
-        if (exec.stderr) {
+        if (run.stderr) {
           addSeparator();
-          exec.stderr.split('\n').forEach(line => {
+          run.stderr.split('\n').forEach(line => {
             if (line) addLine('Runtime: ' + line, 'error');
           });
         }
 
         addSeparator();
-        const exitClass = exec.exit_code === 0 ? 'success' : 'error';
-        addPromptLine('$', `Process exited with code ${exec.exit_code}  (${execTime}ms)`, exitClass);
+        const exitClass = run.code === 0 ? 'success' : 'error';
+        addPromptLine('$', `Process exited with code ${run.code}`, exitClass);
 
-        document.getElementById('statusDot').style.background = exec.exit_code === 0 ? 'var(--green)' : 'var(--red)';
-        document.getElementById('statusText').textContent = exec.exit_code === 0 ? `Done · ${execTime}ms` : `Exit ${exec.exit_code}`;
+        document.getElementById('statusDot').style.background = run.code === 0 ? 'var(--green)' : 'var(--red)';
+        document.getElementById('statusText').textContent = run.code === 0 ? `Done` : `Exit ${run.code}`;
       }
     }
 
     // ─── ANALYSIS TAB ───
-    const analysis = result.analysis;
-    if (analysis) {
-      const at = document.getElementById('analysisOutput');
-      at.innerHTML = '';
-
-      const addA = (text, cls = '') => {
+    const at = document.getElementById('analysisOutput');
+    at.innerHTML = '';
+    const addA = (text, cls = '') => {
         const d = document.createElement('div');
         d.className = 'term-line';
         d.innerHTML = `<span class="term-text ${cls}" style="white-space:pre-wrap;">${escapeHtml(text)}</span>`;
         at.appendChild(d);
-      };
-      const addAS = () => { const hr = document.createElement('hr'); hr.className = 'term-separator'; at.appendChild(hr); };
+    };
+    const addAS = () => { const hr = document.createElement('hr'); hr.className = 'term-separator'; at.appendChild(hr); };
 
-      addA('CODE ANALYSIS', 'gold');
-      addAS();
-      if (analysis.complexity) addA(`Complexity:   ${analysis.complexity}`, 'info');
-      if (analysis.headers_used?.length) addA(`Headers:      ${analysis.headers_used.join(', ')}`, 'dim');
-      if (analysis.functions_defined?.length) addA(`Functions:    ${analysis.functions_defined.join(', ')}`, 'dim');
-      if (analysis.memory_notes) { addAS(); addA(`Memory:  ${analysis.memory_notes}`, 'warning'); }
-      if (analysis.suggestions?.length) {
-        addAS();
-        addA('Suggestions:', 'success');
-        analysis.suggestions.forEach((s, i) => addA(`  ${i+1}. ${s}`, ''));
-      }
-    }
+    addA('CODE ANALYSIS', 'gold');
+    addAS();
+    addA('Notice: Static AI Analysis is disabled.', 'info');
+    addA('The compiler is now running on a real GCC backend (Piston API).', 'dim');
+    addAS();
 
     // Flash effect
     term.classList.add('compile-flash');
     setTimeout(() => term.classList.remove('compile-flash'), 700);
 
   } catch (err) {
-    clearInterval(stepInterval);
     addSeparator();
-    addLine('Internal compiler error: ' + err.message, 'error');
-    addLine('Check your network and try again.', 'dim');
+    addLine('Execution error: ' + err.message, 'error');
+    addLine('Could not reach the execution server. Check your network.', 'dim');
     document.getElementById('statusText').textContent = 'Error';
   }
 

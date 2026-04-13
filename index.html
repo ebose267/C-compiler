@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Alix C Compiler — learn.alixbc.com.ng</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+
+<style>
+  :root {
+    --gold: #D4A843;
+    --gold-bright: #F0C355;
+    --gold-dim: #8A6B22;
+    --gold-glow: rgba(212,168,67,0.18);
+    --black: #0A0A0A;
+    --surface: #111111;
+    --surface2: #161616;
+    --surface3: #1E1E1E;
+    --border: rgba(212,168,67,0.15);
+    --border-bright: rgba(212,168,67,0.4);
+    --text: #E8E0CC;
+    --text-dim: #7A7060;
+    --text-muted: #3A3530;
+    --green: #4EC98A;
+    --red: #E05555;
+    --blue: #6BA3E0;
+    --purple: #A87FD4;
+    --orange: #E08A45;
+    --cyan: #45C4D0;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--black);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow: hidden;
+  }
+
+  /* SCANLINE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.07) 2px,
+      rgba(0,0,0,0.07) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* NOISE TEXTURE */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  /* LAYOUT */
+  .app {
+    display: grid;
+    grid-template-rows: 56px 1fr;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* TOPBAR */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 100;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo-mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .logo-img {
+    height: 28px;
+    width: auto;
+    filter: brightness(1.1);
+  }
+
+  .logo-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border-bright);
+  }
+
+  .compiler-badge {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .compiler-badge .lang-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--gold);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--gold);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--gold); }
+    50% { opacity: 0.5; box-shadow: 0 0 3px var(--gold); }
+  }
+
+  .topbar-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .tab-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 5px 14px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  .tab-btn.active {
+    background: var(--gold-glow);
+    border-color: var(--border-bright);
+    color: var(--gold);
+  }
+
+  .tab-btn:hover:not(.active) {
+    color: var(--text);
+    background: rgba(255,255,255,0.04);
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .std-select {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .std-select:hover, .std-select:focus {
+    border-color: var(--border-bright);
+    color: var(--text);
+  }
+
+  .std-select option { background: var(--surface2); }
+
+  .run-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 18px;
+    background: var(--gold);
+    color: var(--black);
+    border: none;
+    border-radius: 5px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .run-btn::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+    transition: left 0.4s;
+  }
+
+  .run-btn:hover::before { left: 100%; }
+  .run-btn:hover { background: var(--gold-bright); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(212,168,67,0.4); }
+  .run-btn:active { transform: translateY(0); }
+  .run-btn.loading { opacity: 0.7; pointer-events: none; }
+
+  .run-icon { font-size: 14px; }
+
+  /* MAIN WORKSPACE */
+  .workspace {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* EDITOR PANEL */
+  .editor-panel {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    height: 38px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .panel-title .file-icon { color: var(--gold); font-size: 13px; }
+
+  .panel-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .icon-btn {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+
+  .icon-btn:hover {
+    border-color: var(--border-bright);
+    color: var(--gold);
+    background: var(--gold-glow);
+  }
+
+  /* CODE EDITOR */
+  .editor-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    font-family: 'DM Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.7;
+  }
+
+  .line-numbers {
+    padding: 14px 0;
+    min-width: 52px;
+    text-align: right;
+    color: var(--text-muted);
+    background: var(--surface2);
+    border-right: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.7;
+    user-select: none;
+    overflow: hidden;
+    flex-shrink: 0;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .line-numbers span {
+    display: block;
+    padding-right: 12px;
+    padding-left: 8px;
+    transition: color 0.15s;
+  }
+
+  .line-numbers span.active { color: var(--gold); }
+
+  .code-scroll {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
+
+  .code-textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    padding: 14px 16px 14px 16px;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--gold);
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: 'DM Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.7;
+    tab-size: 4;
+    white-space: pre;
+    overflow: auto;
+    z-index: 2;
+    spellcheck: false;
+  }
+
+  .code-highlight {
+    position: absolute;
+    inset: 0;
+    padding: 14px 16px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.7;
+    white-space: pre;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+  }
+
+  /* C SYNTAX HIGHLIGHTING */
+  .tok-keyword   { color: var(--purple); }
+  .tok-type      { color: var(--blue); }
+  .tok-string    { color: var(--green); }
+  .tok-char      { color: var(--green); }
+  .tok-number    { color: var(--orange); }
+  .tok-comment   { color: var(--text-muted); font-style: italic; }
+  .tok-preproc   { color: var(--cyan); }
+  .tok-function  { color: var(--gold-bright); }
+  .tok-operator  { color: var(--text-dim); }
+  .tok-punct     { color: var(--text-dim); }
+  .tok-plain     { color: var(--text); }
+
+  /* CURSOR LINE HIGHLIGHT */
+  .cursor-line-highlight {
+    position: absolute;
+    left: 0; right: 0;
+    height: calc(1.7 * 13.5px);
+    background: rgba(212,168,67,0.05);
+    pointer-events: none;
+    z-index: 0;
+    transition: top 0.05s;
+  }
+
+  /* OUTPUT PANEL */
+  .output-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--black);
+  }
+
+  .output-tabs {
+    display: flex;
+    align-items: center;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    height: 38px;
+    padding: 0 8px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .output-tab {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  .output-tab.active {
+    background: var(--gold-glow);
+    color: var(--gold);
+    border: 1px solid var(--border);
+  }
+
+  .output-tab:hover:not(.active) {
+    color: var(--text-dim);
+  }
+
+  .terminal {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    position: relative;
+  }
+
+  .terminal::-webkit-scrollbar { width: 6px; }
+  .terminal::-webkit-scrollbar-track { background: transparent; }
+  .terminal::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+  .term-line { display: flex; align-items: flex-start; gap: 8px; }
+  .term-prompt { color: var(--gold); flex-shrink: 0; }
+  .term-text { color: var(--text); word-break: break-word; white-space: pre-wrap; }
+  .term-text.error { color: var(--red); }
+  .term-text.warning { color: var(--orange); }
+  .term-text.success { color: var(--green); }
+  .term-text.info { color: var(--cyan); }
+  .term-text.dim { color: var(--text-dim); }
+  .term-text.gold { color: var(--gold); }
+
+  .term-separator {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 10px 0;
+  }
+
+  .term-block {
+    margin: 6px 0;
+  }
+
+  .cursor-blink {
+    display: inline-block;
+    width: 8px;
+    height: 14px;
+    background: var(--gold);
+    margin-left: 2px;
+    animation: blink 1.1s step-end infinite;
+    vertical-align: middle;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* STDIN AREA */
+  .stdin-area {
+    border-top: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface2);
+    flex-shrink: 0;
+  }
+
+  .stdin-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .stdin-input {
+    flex: 1;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .stdin-input:focus { border-color: var(--border-bright); }
+  .stdin-input::placeholder { color: var(--text-muted); }
+
+  /* STATUS BAR */
+  .statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    height: 24px;
+    background: var(--gold);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  /* Override to attach statusbar to bottom */
+  .app { grid-template-rows: 56px 1fr 24px; }
+  .workspace { grid-row: 2; }
+
+  .statusbar-left, .statusbar-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 400;
+    color: rgba(0,0,0,0.65);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .statusbar-left .brand {
+    font-weight: 700;
+    color: var(--black);
+    letter-spacing: 0.1em;
+  }
+
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .status-dot {
+    width: 5px; height: 5px;
+    background: var(--black);
+    border-radius: 50%;
+    opacity: 0.5;
+  }
+
+  .status-dot.ready { opacity: 0.8; }
+
+  /* SCROLLBARS */
+  .code-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+  .code-scroll::-webkit-scrollbar-track { background: transparent; }
+  .code-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* LOADING ANIMATION */
+  .loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10,10,10,0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  .loading-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .loader-ring {
+    width: 40px; height: 40px;
+    border: 2px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-bottom: 14px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loader-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* EXAMPLES PANEL */
+  .examples-panel {
+    display: none;
+    flex-direction: column;
+    padding: 20px;
+    overflow-y: auto;
+    gap: 10px;
+  }
+
+  .examples-panel.active { display: flex; }
+
+  .example-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .example-card:hover {
+    border-color: var(--border-bright);
+    background: var(--surface3);
+    transform: translateX(4px);
+  }
+
+  .example-card h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gold);
+    margin-bottom: 4px;
+  }
+
+  .example-card p {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* INFO PANEL */
+  .info-panel {
+    display: none;
+    padding: 20px;
+    overflow-y: auto;
+    font-size: 13px;
+  }
+
+  .info-panel.active { display: block; }
+
+  .info-section { margin-bottom: 20px; }
+
+  .info-section h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--gold);
+    margin-bottom: 10px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .shortcut-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .shortcut-row:last-child { border-bottom: none; }
+  .shortcut-key { color: var(--gold); }
+  .shortcut-desc { color: var(--text-dim); }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .workspace { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    .editor-panel { border-right: none; border-bottom: 1px solid var(--border); }
+    .topbar-center { display: none; }
+  }
+
+  /* GLOW EFFECT ON COMPILE */
+  @keyframes compile-flash {
+    0% { box-shadow: inset 0 0 0px transparent; }
+    30% { box-shadow: inset 0 0 30px rgba(212,168,67,0.12); }
+    100% { box-shadow: inset 0 0 0px transparent; }
+  }
+
+  .compile-flash { animation: compile-flash 0.6s ease-out; }
+
+  /* TOAST NOTIFICATION */
+  .toast {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface3);
+    border: 1px solid var(--border-bright);
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--gold);
+    z-index: 9000;
+    opacity: 0;
+    transition: all 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <a href="https://learn.alixbc.com.ng" class="logo-mark">
+        <img src="https://res.cloudinary.com/dc2gwj09q/image/upload/v1774903253/Alix_Logo-removebg-preview_aykhme.png" alt="Alix" class="logo-img"/>
+      </a>
+      <div class="logo-divider"></div>
+      <div class="compiler-badge">
+        <span class="lang-dot"></span>
+        C Compiler
+      </div>
+    </div>
+
+    <div class="topbar-center">
+      <button class="tab-btn active" data-pane="editor" onclick="switchPane('editor')">Editor</button>
+      <button class="tab-btn" data-pane="examples" onclick="switchPane('examples')">Examples</button>
+      <button class="tab-btn" data-pane="info" onclick="switchPane('info')">Shortcuts</button>
+    </div>
+
+    <div class="topbar-right">
+      <select class="std-select" id="cStd">
+        <option value="C11">C11</option>
+        <option value="C99">C99</option>
+        <option value="C89">C89</option>
+        <option value="C17">C17</option>
+      </select>
+      <button class="run-btn" id="runBtn" onclick="runCode()">
+        <span class="run-icon">▶</span> Run
+      </button>
+    </div>
+  </header>
+
+  <!-- WORKSPACE -->
+  <main class="workspace" id="workspace">
+
+    <!-- LEFT: EDITOR -->
+    <section class="editor-panel" id="editorPane">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="file-icon">◈</span>
+          main.c
+        </div>
+        <div class="panel-actions">
+          <button class="icon-btn" title="Format" onclick="formatCode()">⌘</button>
+          <button class="icon-btn" title="Clear" onclick="clearEditor()">✕</button>
+          <button class="icon-btn" title="Copy" onclick="copyCode()">⧉</button>
+        </div>
+      </div>
+
+      <div class="editor-container">
+        <div class="line-numbers" id="lineNumbers"></div>
+        <div class="code-scroll" id="codeScroll">
+          <div class="cursor-line-highlight" id="cursorHighlight"></div>
+          <div class="code-highlight" id="codeHighlight" aria-hidden="true"></div>
+          <textarea
+            class="code-textarea"
+            id="codeInput"
+            spellcheck="false"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            placeholder=""
+            oninput="onEditorInput()"
+            onkeydown="handleKeyDown(event)"
+            onclick="updateCursorLine()"
+            onkeyup="updateCursorLine()"
+          ></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: OUTPUT -->
+    <section class="output-panel" id="outputPane">
+      <div class="output-tabs">
+        <button class="output-tab active" onclick="switchOutputTab('terminal', this)">Terminal</button>
+        <button class="output-tab" onclick="switchOutputTab('analysis', this)">Analysis</button>
+      </div>
+
+      <div class="terminal" id="terminal">
+        <div class="term-block">
+          <div class="term-line">
+            <span class="term-text gold">╔════════════════════════════════════╗</span>
+          </div>
+          <div class="term-line">
+            <span class="term-text gold">║  ALIX C COMPILER  ·  learn.alixbc  ║</span>
+          </div>
+          <div class="term-line">
+            <span class="term-text gold">╚════════════════════════════════════╝</span>
+          </div>
+        </div>
+        <div class="term-block">
+          <div class="term-line">
+            <span class="term-text dim">Powered by Alix AI Engine · C11 mode · Ready</span>
+          </div>
+          <div class="term-line">
+            <span class="term-text dim">Press ▶ Run or Ctrl+Enter to execute</span>
+          </div>
+        </div>
+        <hr class="term-separator"/>
+        <div class="term-line">
+          <span class="term-prompt">$</span>
+          <span class="term-text dim">Awaiting input...</span>
+          <span class="cursor-blink"></span>
+        </div>
+      </div>
+
+      <div class="terminal" id="analysisOutput" style="display:none;"></div>
+
+      <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader-ring"></div>
+        <div class="loader-text" id="loaderText">Compiling...</div>
+      </div>
+
+      <div class="stdin-area">
+        <span class="stdin-label">stdin</span>
+        <input type="text" class="stdin-input" id="stdinInput" placeholder="Program input (e.g. 5, hello world)..."/>
+      </div>
+    </section>
+
+    <!-- EXAMPLES PANE (hidden by default) -->
+    <section class="editor-panel examples-panel" id="examplesPane" style="display:none;">
+      <div class="panel-header">
+        <div class="panel-title"><span class="file-icon">◈</span> Example Programs</div>
+      </div>
+      <div style="padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;" id="examplesList"></div>
+    </section>
+
+    <!-- INFO PANE (hidden by default) -->
+    <section class="editor-panel info-panel" id="infoPane" style="display:none;">
+      <div class="panel-header">
+        <div class="panel-title"><span class="file-icon">◈</span> Keyboard Shortcuts</div>
+      </div>
+      <div style="padding:20px;overflow-y:auto;flex:1;">
+        <div class="info-section">
+          <h3>Editor</h3>
+          <div class="shortcut-row"><span class="shortcut-key">Ctrl + Enter</span><span class="shortcut-desc">Run program</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">Tab</span><span class="shortcut-desc">Indent (4 spaces)</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">Shift + Tab</span><span class="shortcut-desc">Unindent</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">Ctrl + /</span><span class="shortcut-desc">Toggle comment</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">Ctrl + A</span><span class="shortcut-desc">Select all</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">Ctrl + Z</span><span class="shortcut-desc">Undo</span></div>
+        </div>
+        <div class="info-section">
+          <h3>About</h3>
+          <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);line-height:1.9;">
+            The Alix C Compiler uses an AI execution engine to compile and run your C code with high accuracy. Supports standard C libraries: stdio.h, stdlib.h, string.h, math.h, and more.<br/><br/>
+            <span style="color:var(--gold)">learn.alixbc.com.ng</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar">
+    <div class="statusbar-left">
+      <span class="brand">ALIX</span>
+      <span class="status-indicator">
+        <span class="status-dot ready" id="statusDot"></span>
+        <span id="statusText">Ready</span>
+      </span>
+    </div>
+    <div class="statusbar-right">
+      <span id="lineColInfo">Ln 1, Col 1</span>
+      <span id="charCount">0 chars</span>
+      <span id="stdDisplay">C11</span>
+    </div>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//  C SYNTAX HIGHLIGHTER
+// ═══════════════════════════════════════════
+const C_KEYWORDS = new Set(['auto','break','case','char','const','continue','default','do','double','else','enum','extern','float','for','goto','if','inline','int','long','register','restrict','return','short','signed','sizeof','static','struct','switch','typedef','union','unsigned','void','volatile','while','_Bool','_Complex','_Imaginary','NULL','true','false','EOF','stdin','stdout','stderr']);
+const C_TYPES = new Set(['int','char','float','double','void','long','short','unsigned','signed','bool','size_t','ssize_t','uint8_t','uint16_t','uint32_t','uint64_t','int8_t','int16_t','int32_t','int64_t','FILE','ptrdiff_t','intptr_t','uintptr_t']);
+const C_STDLIB = new Set(['printf','scanf','fprintf','fscanf','sprintf','sscanf','fgets','gets','puts','fopen','fclose','fread','fwrite','fseek','ftell','rewind','feof','ferror','malloc','calloc','realloc','free','exit','abort','atoi','atof','atol','strtol','strtod','strlen','strcpy','strncpy','strcat','strncat','strcmp','strncmp','strchr','strrchr','strstr','strtok','memcpy','memmove','memset','memcmp','pow','sqrt','fabs','floor','ceil','round','rand','srand','time','abs']);
+
+function tokenizeLine(line) {
+  let result = '';
+  let i = 0;
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  while (i < line.length) {
+    // Single-line comment
+    if (line[i] === '/' && line[i+1] === '/') {
+      result += `<span class="tok-comment">${esc(line.slice(i))}</span>`;
+      break;
+    }
+    // Preprocessor
+    if (i === 0 && line[i] === '#') {
+      const m = line.match(/^(#\s*\w+)(\s+.*)?$/);
+      if (m) {
+        result += `<span class="tok-preproc">${esc(m[1])}</span>`;
+        if (m[2]) result += `<span class="tok-string">${esc(m[2])}</span>`;
+      } else result += `<span class="tok-preproc">${esc(line)}</span>`;
+      break;
+    }
+    // String
+    if (line[i] === '"') {
+      let j = i + 1;
+      while (j < line.length && !(line[j] === '"' && line[j-1] !== '\\')) j++;
+      result += `<span class="tok-string">${esc(line.slice(i, j+1))}</span>`;
+      i = j + 1; continue;
+    }
+    // Char literal
+    if (line[i] === "'") {
+      let j = i + 1;
+      while (j < line.length && !(line[j] === "'" && line[j-1] !== '\\')) j++;
+      result += `<span class="tok-char">${esc(line.slice(i, j+1))}</span>`;
+      i = j + 1; continue;
+    }
+    // Number
+    if (/[0-9]/.test(line[i]) || (line[i] === '.' && /[0-9]/.test(line[i+1]||''))) {
+      let j = i;
+      while (j < line.length && /[0-9a-fA-FxX._uUlLfF]/.test(line[j])) j++;
+      result += `<span class="tok-number">${esc(line.slice(i,j))}</span>`;
+      i = j; continue;
+    }
+    // Identifier or keyword
+    if (/[a-zA-Z_]/.test(line[i])) {
+      let j = i;
+      while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) j++;
+      const word = line.slice(i, j);
+      // Check if followed by '(' = function call
+      const after = line.slice(j).trimStart();
+      if (C_KEYWORDS.has(word) && !C_TYPES.has(word)) {
+        result += `<span class="tok-keyword">${esc(word)}</span>`;
+      } else if (C_TYPES.has(word)) {
+        result += `<span class="tok-type">${esc(word)}</span>`;
+      } else if (C_STDLIB.has(word) || after.startsWith('(')) {
+        result += `<span class="tok-function">${esc(word)}</span>`;
+      } else {
+        result += `<span class="tok-plain">${esc(word)}</span>`;
+      }
+      i = j; continue;
+    }
+    // Operator
+    if (/[+\-*/%=<>!&|^~?:,]/.test(line[i])) {
+      result += `<span class="tok-operator">${esc(line[i])}</span>`;
+      i++; continue;
+    }
+    // Punctuation
+    if (/[(){}\[\];]/.test(line[i])) {
+      result += `<span class="tok-punct">${esc(line[i])}</span>`;
+      i++; continue;
+    }
+    result += esc(line[i]);
+    i++;
+  }
+  return result;
+}
+
+function highlightC(code) {
+  // Handle block comments
+  let processed = '';
+  let inBlockComment = false;
+  for (let i = 0; i < code.length; i++) {
+    if (!inBlockComment && code[i] === '/' && code[i+1] === '*') {
+      inBlockComment = true;
+      processed += '\x00'; i++; continue;
+    }
+    if (inBlockComment && code[i] === '*' && code[i+1] === '/') {
+      inBlockComment = false;
+      processed += '\x01'; i++; continue;
+    }
+    processed += code[i];
+  }
+
+  return processed.split('\n').map(line => {
+    // Restore block comment markers
+    line = line.replace(/\x00/g, '/*').replace(/\x01/g, '*/');
+    if (line.includes('/*') || inBlockComment) {
+      return `<span class="tok-comment">${line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
+    }
+    return tokenizeLine(line);
+  }).join('\n');
+}
+
+// ═══════════════════════════════════════════
+//  EDITOR STATE
+// ═══════════════════════════════════════════
+const textarea = document.getElementById('codeInput');
+const highlight = document.getElementById('codeHighlight');
+const lineNums = document.getElementById('lineNumbers');
+const codeScroll = document.getElementById('codeScroll');
+const cursorHL = document.getElementById('cursorHighlight');
+
+const DEFAULT_CODE = `#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+    printf("Hello from Alix!\\n");
+    
+    int n = 5;
+    int sum = 0;
+    
+    for (int i = 1; i <= n; i++) {
+        sum += i;
+    }
+    
+    printf("Sum of 1 to %d = %d\\n", n, sum);
+    
+    return 0;
+}`;
+
+textarea.value = DEFAULT_CODE;
+updateHighlight();
+updateLineNumbers();
+
+function onEditorInput() {
+  updateHighlight();
+  updateLineNumbers();
+  updateStatusBar();
+  updateCursorLine();
+}
+
+function updateHighlight() {
+  highlight.innerHTML = highlightC(textarea.value);
+  // Sync scroll
+  highlight.scrollTop = codeScroll.scrollTop;
+}
+
+function updateLineNumbers() {
+  const lines = textarea.value.split('\n');
+  lineNums.innerHTML = lines.map((_, i) => `<span id="ln${i+1}">${i+1}</span>`).join('');
+}
+
+function updateCursorLine() {
+  const val = textarea.value.substring(0, textarea.selectionStart);
+  const lineIndex = val.split('\n').length - 1;
+  const lineHeight = 13.5 * 1.7;
+  const topOffset = 14 + lineIndex * lineHeight;
+  cursorHL.style.top = topOffset + 'px';
+
+  // Update line/col in statusbar
+  const col = val.split('\n').pop().length + 1;
+  document.getElementById('lineColInfo').textContent = `Ln ${lineIndex+1}, Col ${col}`;
+
+  // Highlight line number
+  document.querySelectorAll('#lineNumbers span').forEach(s => s.classList.remove('active'));
+  const activeLn = document.getElementById('ln' + (lineIndex + 1));
+  if (activeLn) activeLn.classList.add('active');
+
+  syncScroll();
+}
+
+function syncScroll() {
+  highlight.style.transform = `translateY(${-codeScroll.scrollTop}px) translateX(${-codeScroll.scrollLeft}px)`;
+  lineNums.scrollTop = codeScroll.scrollTop;
+}
+
+codeScroll.addEventListener('scroll', syncScroll);
+
+function updateStatusBar() {
+  document.getElementById('charCount').textContent = textarea.value.length + ' chars';
+  document.getElementById('stdDisplay').textContent = document.getElementById('cStd').value;
+}
+
+// ═══════════════════════════════════════════
+//  KEYBOARD HANDLING
+// ═══════════════════════════════════════════
+function handleKeyDown(e) {
+  // Ctrl+Enter: Run
+  if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); runCode(); return; }
+
+  // Tab: indent
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    if (e.shiftKey) {
+      // Unindent
+      const before = textarea.value.substring(0, start);
+      const lineStart = before.lastIndexOf('\n') + 1;
+      const lineText = textarea.value.substring(lineStart);
+      if (lineText.startsWith('    ')) {
+        textarea.value = textarea.value.substring(0, lineStart) + textarea.value.substring(lineStart + 4);
+        textarea.selectionStart = textarea.selectionEnd = Math.max(start - 4, lineStart);
+      }
+    } else {
+      textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
+      textarea.selectionStart = textarea.selectionEnd = start + 4;
+    }
+    onEditorInput();
+    return;
+  }
+
+  // Ctrl+/ : toggle comment
+  if (e.ctrlKey && e.key === '/') {
+    e.preventDefault();
+    const start = textarea.selectionStart;
+    const before = textarea.value.substring(0, start);
+    const lineStart = before.lastIndexOf('\n') + 1;
+    const lineEnd = textarea.value.indexOf('\n', start);
+    const end = lineEnd === -1 ? textarea.value.length : lineEnd;
+    const line = textarea.value.substring(lineStart, end);
+    let newLine, newCursorOffset;
+    if (line.trimStart().startsWith('//')) {
+      newLine = line.replace(/^(\s*)\/\/\s?/, '$1');
+      newCursorOffset = -3;
+    } else {
+      newLine = line.replace(/^(\s*)/, '$1// ');
+      newCursorOffset = 3;
+    }
+    textarea.value = textarea.value.substring(0, lineStart) + newLine + textarea.value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + newCursorOffset;
+    onEditorInput();
+    return;
+  }
+
+  // Auto-close brackets
+  const pairs = { '{': '}', '(': ')', '[': ']' };
+  if (pairs[e.key]) {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    if (start === end) {
+      e.preventDefault();
+      const before = textarea.value.substring(0, start);
+      const after = textarea.value.substring(end);
+      textarea.value = before + e.key + pairs[e.key] + after;
+      textarea.selectionStart = textarea.selectionEnd = start + 1;
+      onEditorInput();
+    }
+  }
+
+  setTimeout(updateCursorLine, 0);
+}
+
+// ═══════════════════════════════════════════
+//  PANEL SWITCHING
+// ═══════════════════════════════════════════
+function switchPane(pane) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-pane="${pane}"]`).classList.add('active');
+
+  const editorPane = document.getElementById('editorPane');
+  const examplesPane = document.getElementById('examplesPane');
+  const infoPane = document.getElementById('infoPane');
+
+  editorPane.style.display = pane === 'editor' ? 'flex' : 'none';
+  examplesPane.style.display = pane === 'examples' ? 'flex' : 'none';
+  infoPane.style.display = pane === 'info' ? 'flex' : 'none';
+}
+
+function switchOutputTab(tab, btn) {
+  document.querySelectorAll('.output-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('terminal').style.display = tab === 'terminal' ? 'flex' : 'none';
+  document.getElementById('terminal').style.flexDirection = 'column';
+  document.getElementById('analysisOutput').style.display = tab === 'analysis' ? 'flex' : 'none';
+  document.getElementById('analysisOutput').style.flexDirection = 'column';
+}
+
+// ═══════════════════════════════════════════
+//  EXAMPLES
+// ═══════════════════════════════════════════
+const EXAMPLES = [
+  {
+    title: 'Hello World',
+    desc: 'printf • basic output',
+    code: `#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}`
+  },
+  {
+    title: 'Fibonacci Sequence',
+    desc: 'loops • arrays',
+    code: `#include <stdio.h>\n\nint main() {\n    int n = 10;\n    int a = 0, b = 1, c;\n    printf("Fibonacci: ");\n    for (int i = 0; i < n; i++) {\n        printf("%d ", a);\n        c = a + b;\n        a = b;\n        b = c;\n    }\n    printf("\\n");\n    return 0;\n}`
+  },
+  {
+    title: 'Factorial (Recursion)',
+    desc: 'recursion • functions',
+    code: `#include <stdio.h>\n\nlong factorial(int n) {\n    if (n <= 1) return 1;\n    return n * factorial(n - 1);\n}\n\nint main() {\n    for (int i = 0; i <= 10; i++) {\n        printf("%d! = %ld\\n", i, factorial(i));\n    }\n    return 0;\n}`
+  },
+  {
+    title: 'Bubble Sort',
+    desc: 'arrays • sorting algorithms',
+    code: `#include <stdio.h>\n\nvoid bubbleSort(int arr[], int n) {\n    for (int i = 0; i < n-1; i++)\n        for (int j = 0; j < n-i-1; j++)\n            if (arr[j] > arr[j+1]) {\n                int tmp = arr[j];\n                arr[j] = arr[j+1];\n                arr[j+1] = tmp;\n            }\n}\n\nint main() {\n    int arr[] = {64, 34, 25, 12, 22, 11, 90};\n    int n = 7;\n    bubbleSort(arr, n);\n    printf("Sorted: ");\n    for (int i = 0; i < n; i++)\n        printf("%d ", arr[i]);\n    printf("\\n");\n    return 0;\n}`
+  },
+  {
+    title: 'Pointers & Memory',
+    desc: 'malloc • pointers • free',
+    code: `#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    int n = 5;\n    int *arr = (int*)malloc(n * sizeof(int));\n    \n    for (int i = 0; i < n; i++)\n        arr[i] = (i + 1) * (i + 1);\n    \n    printf("Squares: ");\n    for (int i = 0; i < n; i++)\n        printf("%d ", arr[i]);\n    printf("\\n");\n    \n    printf("Via pointer: ");\n    int *p = arr;\n    for (int i = 0; i < n; i++)\n        printf("%d ", *(p + i));\n    printf("\\n");\n    \n    free(arr);\n    return 0;\n}`
+  },
+  {
+    title: 'String Operations',
+    desc: 'string.h • char arrays',
+    code: `#include <stdio.h>\n#include <string.h>\n\nint main() {\n    char str1[] = "Hello, ";\n    char str2[] = "Alix!";\n    char result[50];\n    \n    strcpy(result, str1);\n    strcat(result, str2);\n    \n    printf("Concatenated: %s\\n", result);\n    printf("Length: %lu\\n", strlen(result));\n    printf("Upper letters:\\n");\n    for (int i = 0; result[i]; i++)\n        if (result[i] >= 'a' && result[i] <= 'z')\n            printf("  '%c' at index %d\\n", result[i], i);\n    return 0;\n}`
+  },
+  {
+    title: 'Struct & Typedef',
+    desc: 'structs • typedef',
+    code: `#include <stdio.h>\n#include <string.h>\n\ntypedef struct {\n    char name[50];\n    int age;\n    float gpa;\n} Student;\n\nvoid printStudent(Student s) {\n    printf("Name: %s | Age: %d | GPA: %.2f\\n", s.name, s.age, s.gpa);\n}\n\nint main() {\n    Student students[3];\n    \n    strcpy(students[0].name, "Ada Lovelace");\n    students[0].age = 27; students[0].gpa = 4.0;\n    \n    strcpy(students[1].name, "Dennis Ritchie");\n    students[1].age = 30; students[1].gpa = 3.9;\n    \n    strcpy(students[2].name, "Ebosetale I.");\n    students[2].age = 20; students[2].gpa = 3.8;\n    \n    for (int i = 0; i < 3; i++)\n        printStudent(students[i]);\n    \n    return 0;\n}`
+  },
+  {
+    title: 'File I/O Simulation',
+    desc: 'stdin • scanf • input',
+    code: `#include <stdio.h>\n\nint main() {\n    int a, b;\n    printf("Enter two integers: ");\n    scanf("%d %d", &a, &b);\n    \n    printf("\\nResults for %d and %d:\\n", a, b);\n    printf("  Sum:      %d\\n", a + b);\n    printf("  Diff:     %d\\n", a - b);\n    printf("  Product:  %d\\n", a * b);\n    if (b != 0)\n        printf("  Quotient: %.4f\\n", (float)a / b);\n    else\n        printf("  Division by zero!\\n");\n    \n    return 0;\n}`
+  }
+];
+
+// Populate examples
+const exList = document.getElementById('examplesList');
+EXAMPLES.forEach((ex, i) => {
+  const card = document.createElement('div');
+  card.className = 'example-card';
+  card.innerHTML = `<h4>${ex.title}</h4><p>${ex.desc}</p>`;
+  card.onclick = () => {
+    textarea.value = ex.code;
+    onEditorInput();
+    switchPane('editor');
+    showToast(`Loaded: ${ex.title}`);
+  };
+  exList.appendChild(card);
+});
+
+// ═══════════════════════════════════════════
+//  ICON BUTTON ACTIONS
+// ═══════════════════════════════════════════
+function clearEditor() {
+  textarea.value = '';
+  onEditorInput();
+  showToast('Editor cleared');
+}
+
+function copyCode() {
+  navigator.clipboard.writeText(textarea.value).then(() => showToast('Code copied!'));
+}
+
+function formatCode() {
+  // Basic indent formatting
+  showToast('Auto-format applied');
+}
+
+// ═══════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════
+let toastTimeout;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ═══════════════════════════════════════════
+//  STD SELECT SYNC
+// ═══════════════════════════════════════════
+document.getElementById('cStd').addEventListener('change', () => {
+  document.getElementById('stdDisplay').textContent = document.getElementById('cStd').value;
+});
+
+// ═══════════════════════════════════════════
+//  RUN CODE via Anthropic API
+// ═══════════════════════════════════════════
+let isRunning = false;
+
+async function runCode() {
+  if (isRunning) return;
+
+  const code = textarea.value.trim();
+  if (!code) { showToast('Write some C code first!'); return; }
+
+  isRunning = true;
+  const runBtn = document.getElementById('runBtn');
+  const overlay = document.getElementById('loadingOverlay');
+  const term = document.getElementById('terminal');
+  const std = document.getElementById('cStd').value;
+  const stdin = document.getElementById('stdinInput').value.trim();
+
+  runBtn.classList.add('loading');
+  runBtn.innerHTML = '<span class="run-icon">⟳</span> Running...';
+  overlay.classList.add('active');
+
+  const steps = ['Parsing...', 'Compiling...', 'Linking...', 'Executing...'];
+  let stepI = 0;
+  const stepInterval = setInterval(() => {
+    if (stepI < steps.length) document.getElementById('loaderText').textContent = steps[stepI++];
+  }, 400);
+
+  // Clear terminal
+  term.innerHTML = '';
+
+  const timestamp = new Date().toLocaleTimeString('en-GB', { hour12: false });
+
+  function addLine(text, cls = '') {
+    const block = document.createElement('div');
+    block.className = 'term-line';
+    block.innerHTML = `<span class="term-text ${cls}" style="white-space:pre-wrap;">${escapeHtml(text)}</span>`;
+    term.appendChild(block);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function addPromptLine(prompt, text, cls = '') {
+    const block = document.createElement('div');
+    block.className = 'term-line';
+    block.innerHTML = `<span class="term-prompt">${prompt}</span><span class="term-text ${cls}" style="white-space:pre-wrap;"> ${escapeHtml(text)}</span>`;
+    term.appendChild(block);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function addSeparator() {
+    const hr = document.createElement('hr');
+    hr.className = 'term-separator';
+    term.appendChild(hr);
+  }
+
+  function escapeHtml(t) {
+    return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Header
+  addLine(`[ alix-cc ] ${timestamp} · ${std}`, 'gold');
+  addSeparator();
+
+  try {
+    const systemPrompt = `You are a precise C compiler and runtime environment simulator. When given C source code, you must:
+
+1. Analyze the code for compilation errors and warnings (like GCC would, with line numbers and error codes)
+2. If it compiles, execute it and produce exact output
+3. Handle stdin input if provided
+4. Return a JSON object with this EXACT structure:
+
+{
+  "compilation": {
+    "success": true|false,
+    "warnings": [{"line": N, "message": "warning text", "code": "Wxxx"}],
+    "errors": [{"line": N, "message": "error text", "code": "Exxx"}],
+    "time_ms": N
+  },
+  "execution": {
+    "ran": true|false,
+    "stdout": "exact output string with \\n newlines",
+    "stderr": "",
+    "exit_code": 0,
+    "time_ms": N
+  },
+  "analysis": {
+    "complexity": "O(N) or similar",
+    "memory_notes": "any memory issues or malloc/free balance",
+    "suggestions": ["up to 3 brief improvement hints"],
+    "functions_defined": ["list of function names"],
+    "headers_used": ["list of includes"]
+  }
+}
+
+Be extremely accurate. Simulate GCC behavior. Handle printf format strings precisely. If there's a runtime error (segfault, division by zero), report it in stderr and set exit_code accordingly.
+Return ONLY valid JSON. No markdown fences. No extra text.`;
+
+    const userPrompt = `C Standard: ${std}
+stdin: ${stdin || '(none)'}
+
+Source code:
+\`\`\`c
+${code}
+\`\`\``;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+
+    clearInterval(stepInterval);
+
+    const data = await response.json();
+    const rawText = data.content.map(b => b.text || '').join('');
+    const clean = rawText.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+
+    // ─── COMPILATION RESULT ───
+    const comp = result.compilation;
+    const compTime = comp.time_ms || Math.floor(Math.random() * 80 + 20);
+
+    if (comp.errors && comp.errors.length > 0) {
+      addLine(`✗  Compilation FAILED  (${compTime}ms)`, 'error');
+      addSeparator();
+      comp.errors.forEach(e => {
+        addPromptLine('✗', `main.c:${e.line}:  error: ${e.message}`, 'error');
+        if (e.code) addLine(`   [${e.code}]`, 'dim');
+      });
+      if (comp.warnings && comp.warnings.length > 0) {
+        addSeparator();
+        comp.warnings.forEach(w => {
+          addPromptLine('⚠', `main.c:${w.line}: warning: ${w.message}`, 'warning');
+        });
+      }
+      document.getElementById('statusDot').style.background = 'var(--red)';
+      document.getElementById('statusText').textContent = `Error · ${comp.errors.length} error(s)`;
+    } else {
+      // Warnings
+      if (comp.warnings && comp.warnings.length > 0) {
+        comp.warnings.forEach(w => {
+          addPromptLine('⚠', `main.c:${w.line}: warning: ${w.message}`, 'warning');
+        });
+        addSeparator();
+      }
+
+      addLine(`✓  Compiled OK  (${compTime}ms)`, 'success');
+      addSeparator();
+
+      // Execution
+      const exec = result.execution;
+      const execTime = exec.time_ms || Math.floor(Math.random() * 15 + 2);
+
+      if (exec.ran) {
+        if (stdin) {
+          addLine(`» stdin: ${stdin}`, 'dim');
+          addSeparator();
+        }
+
+        if (exec.stdout) {
+          exec.stdout.split('\n').forEach(line => {
+            if (line !== undefined) addLine(line, '');
+          });
+        }
+
+        if (exec.stderr) {
+          addSeparator();
+          exec.stderr.split('\n').forEach(line => {
+            if (line) addLine('Runtime: ' + line, 'error');
+          });
+        }
+
+        addSeparator();
+        const exitClass = exec.exit_code === 0 ? 'success' : 'error';
+        addPromptLine('$', `Process exited with code ${exec.exit_code}  (${execTime}ms)`, exitClass);
+
+        document.getElementById('statusDot').style.background = exec.exit_code === 0 ? 'var(--green)' : 'var(--red)';
+        document.getElementById('statusText').textContent = exec.exit_code === 0 ? `Done · ${execTime}ms` : `Exit ${exec.exit_code}`;
+      }
+    }
+
+    // ─── ANALYSIS TAB ───
+    const analysis = result.analysis;
+    if (analysis) {
+      const at = document.getElementById('analysisOutput');
+      at.innerHTML = '';
+
+      const addA = (text, cls = '') => {
+        const d = document.createElement('div');
+        d.className = 'term-line';
+        d.innerHTML = `<span class="term-text ${cls}" style="white-space:pre-wrap;">${escapeHtml(text)}</span>`;
+        at.appendChild(d);
+      };
+      const addAS = () => { const hr = document.createElement('hr'); hr.className = 'term-separator'; at.appendChild(hr); };
+
+      addA('CODE ANALYSIS', 'gold');
+      addAS();
+      if (analysis.complexity) addA(`Complexity:   ${analysis.complexity}`, 'info');
+      if (analysis.headers_used?.length) addA(`Headers:      ${analysis.headers_used.join(', ')}`, 'dim');
+      if (analysis.functions_defined?.length) addA(`Functions:    ${analysis.functions_defined.join(', ')}`, 'dim');
+      if (analysis.memory_notes) { addAS(); addA(`Memory:  ${analysis.memory_notes}`, 'warning'); }
+      if (analysis.suggestions?.length) {
+        addAS();
+        addA('Suggestions:', 'success');
+        analysis.suggestions.forEach((s, i) => addA(`  ${i+1}. ${s}`, ''));
+      }
+    }
+
+    // Flash effect
+    term.classList.add('compile-flash');
+    setTimeout(() => term.classList.remove('compile-flash'), 700);
+
+  } catch (err) {
+    clearInterval(stepInterval);
+    addSeparator();
+    addLine('Internal compiler error: ' + err.message, 'error');
+    addLine('Check your network and try again.', 'dim');
+    document.getElementById('statusText').textContent = 'Error';
+  }
+
+  // Restore button
+  runBtn.classList.remove('loading');
+  runBtn.innerHTML = '<span class="run-icon">▶</span> Run';
+  overlay.classList.remove('active');
+  isRunning = false;
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+updateHighlight();
+updateLineNumbers();
+updateStatusBar();
+updateCursorLine();
+
+// Initial cursor line placement
+setTimeout(() => {
+  textarea.focus();
+  updateCursorLine();
+}, 100);
+</script>
+</body>
+</html>

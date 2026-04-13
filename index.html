@@ -1348,21 +1348,17 @@ async function runCode() {
 
   try {
     // Prepare Piston API payload (Public open-source API, NO API keys needed)
+    // Removed custom memory/time limits as the free tier often rejects them
     const payload = {
       language: "c",
-      version: "*", // Uses the latest available GCC
+      version: "10.2.0", // Hardcoded to a known, stable version on the Piston server
       files: [
         {
           name: "main.c",
           content: code
         }
       ],
-      stdin: stdin || "",
-      args: [],
-      compile_timeout: 10000,
-      run_timeout: 3000,
-      compile_memory_limit: -1,
-      run_memory_limit: -1
+      stdin: stdin || ""
     };
 
     document.getElementById('loaderText').textContent = 'Executing...';
@@ -1373,7 +1369,12 @@ async function runCode() {
       body: JSON.stringify(payload)
     });
 
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    if (!response.ok) {
+        // Log the exact error from the server instead of a generic "HTTP error"
+        const errorText = await response.text();
+        throw new Error(`Server returned HTTP ${response.status}: ${errorText}`);
+    }
+    
     const result = await response.json();
 
     // Check Compilation
@@ -1456,7 +1457,7 @@ async function runCode() {
   } catch (err) {
     addSeparator();
     addLine('Execution error: ' + err.message, 'error');
-    addLine('Could not reach the execution server. Check your network.', 'dim');
+    addLine('Could not reach the execution server. Check your network or API status.', 'dim');
     document.getElementById('statusText').textContent = 'Error';
   }
 

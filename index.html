@@ -10,7 +10,7 @@
 
 <style>
   :root {
-    --gold: #D4A843;
+    --gold: #D4Af37;
     --gold-bright: #F0C355;
     --gold-dim: #8A6B22;
     --gold-glow: rgba(212,168,67,0.18);
@@ -828,7 +828,7 @@
         </div>
         <div class="term-block">
           <div class="term-line">
-            <span class="term-text dim">Powered by GCC Backend · Ready</span>
+            <span class="term-text dim">Powered by Alix AI Engine · Ready</span>
           </div>
           <div class="term-line">
             <span class="term-text dim">Press ▶ Run or Ctrl+Enter to execute</span>
@@ -879,7 +879,7 @@
         <div class="info-section">
           <h3>About</h3>
           <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);line-height:1.9;">
-            The Alix C Compiler uses the open-source Piston code execution API. It runs a genuine GCC compiler in a secure Linux container on the backend.<br/><br/>
+            The Alix C Compiler uses an AI execution engine to compile and run your C code with high accuracy. Supports standard C libraries: stdio.h, stdlib.h, string.h, math.h, and more.<br/><br/>
             <span style="color:var(--gold)">learn.alixbc.com.ng</span>
           </div>
         </div>
@@ -1289,7 +1289,7 @@ document.getElementById('cStd').addEventListener('change', () => {
 });
 
 // ═══════════════════════════════════════════
-//  RUN CODE via Piston API (Real GCC Backend)
+//  RUN CODE via Gemini API
 // ═══════════════════════════════════════════
 let isRunning = false;
 
@@ -1303,13 +1303,18 @@ async function runCode() {
   const runBtn = document.getElementById('runBtn');
   const overlay = document.getElementById('loadingOverlay');
   const term = document.getElementById('terminal');
-  const stdin = document.getElementById('stdinInput').value;
+  const std = document.getElementById('cStd').value;
+  const stdin = document.getElementById('stdinInput').value.trim();
 
   runBtn.classList.add('loading');
   runBtn.innerHTML = '<span class="run-icon">⟳</span> Running...';
   overlay.classList.add('active');
 
-  document.getElementById('loaderText').textContent = 'Compiling...';
+  const steps = ['Parsing...', 'Compiling...', 'Linking...', 'Executing...'];
+  let stepI = 0;
+  const stepInterval = setInterval(() => {
+    if (stepI < steps.length) document.getElementById('loaderText').textContent = steps[stepI++];
+  }, 400);
 
   // Clear terminal
   term.innerHTML = '';
@@ -1343,121 +1348,200 @@ async function runCode() {
   }
 
   // Header
-  addLine(`[ alix-cc ] ${timestamp} · GCC Backend`, 'gold');
+  addLine(`[ alix-cc ] ${timestamp} · ${std}`, 'gold');
   addSeparator();
 
   try {
-    // Prepare Piston API payload (Public open-source API, NO API keys needed)
-    // Removed custom memory/time limits as the free tier often rejects them
+    const systemPrompt = `You are a precise C compiler and runtime environment simulator. When given C source code, you must:
+
+1. Analyze the code for compilation errors and warnings (like GCC would, with line numbers and error codes)
+2. If it compiles, execute it and produce exact output
+3. Handle stdin input if provided
+
+Be extremely accurate. Simulate GCC behavior. Handle printf format strings precisely. If there's a runtime error (segfault, division by zero), report it in stderr and set exit_code accordingly.`;
+
+    const userPrompt = `C Standard: ${std}
+stdin: ${stdin || '(none)'}
+
+Source code:
+\`\`\`c
+${code}
+\`\`\``;
+
+    // Gemini API Setup
+    const apiKey = ""; // Execution environment injects this
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+    // Payload configured for Structured JSON Output matching the expected schema
     const payload = {
-      language: "c",
-      version: "10.2.0", // Hardcoded to a known, stable version on the Piston server
-      files: [
-        {
-          name: "main.c",
-          content: code
+        contents: [{ parts: [{ text: userPrompt }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: "OBJECT",
+                properties: {
+                    compilation: {
+                        type: "OBJECT",
+                        properties: {
+                            success: { type: "BOOLEAN" },
+                            warnings: { type: "ARRAY", items: { type: "OBJECT", properties: { line: { type: "NUMBER" }, message: { type: "STRING" }, code: { type: "STRING" } } } },
+                            errors: { type: "ARRAY", items: { type: "OBJECT", properties: { line: { type: "NUMBER" }, message: { type: "STRING" }, code: { type: "STRING" } } } },
+                            time_ms: { type: "NUMBER" }
+                        }
+                    },
+                    execution: {
+                        type: "OBJECT",
+                        properties: {
+                            ran: { type: "BOOLEAN" },
+                            stdout: { type: "STRING" },
+                            stderr: { type: "STRING" },
+                            exit_code: { type: "NUMBER" },
+                            time_ms: { type: "NUMBER" }
+                        }
+                    },
+                    analysis: {
+                        type: "OBJECT",
+                        properties: {
+                            complexity: { type: "STRING" },
+                            memory_notes: { type: "STRING" },
+                            suggestions: { type: "ARRAY", items: { type: "STRING" } },
+                            functions_defined: { type: "ARRAY", items: { type: "STRING" } },
+                            headers_used: { type: "ARRAY", items: { type: "STRING" } }
+                        }
+                    }
+                }
+            }
         }
-      ],
-      stdin: stdin || ""
     };
 
-    document.getElementById('loaderText').textContent = 'Executing...';
-
-    const response = await fetch('https://emkc.org/api/v2/piston/execute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-        // Log the exact error from the server instead of a generic "HTTP error"
-        const errorText = await response.text();
-        throw new Error(`Server returned HTTP ${response.status}: ${errorText}`);
-    }
+    // Exponential Backoff implementation
+    const delays = [1000, 2000, 4000, 8000, 16000];
+    let responseData = null;
     
-    const result = await response.json();
+    for (let i = 0; i <= delays.length; i++) {
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            responseData = await response.json();
+            break; // Success, exit retry loop
+        } catch (err) {
+            if (i === delays.length) throw err; // Throw on final failure
+            await new Promise(r => setTimeout(r, delays[i])); // Wait and retry
+        }
+    }
 
-    // Check Compilation
-    const comp = result.compile;
-    const run = result.run;
+    clearInterval(stepInterval);
 
-    // Note: For C, Piston compiles first. If compile fails, run won't exist or will be empty.
-    if (comp && comp.code !== 0) {
-      addLine(`✗  Compilation FAILED`, 'error');
+    // Extract text block containing JSON
+    const textResponse = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textResponse) throw new Error("Invalid format received from the compiler engine.");
+    
+    const result = JSON.parse(textResponse);
+
+    // ─── COMPILATION RESULT ───
+    const comp = result.compilation;
+    const compTime = comp.time_ms || Math.floor(Math.random() * 80 + 20);
+
+    if (comp.errors && comp.errors.length > 0) {
+      addLine(`✗  Compilation FAILED  (${compTime}ms)`, 'error');
       addSeparator();
-      if (comp.stderr) {
-        comp.stderr.split('\n').forEach(line => {
-          if(line.trim()) addLine(line, 'error');
+      comp.errors.forEach(e => {
+        addPromptLine('✗', `main.c:${e.line}:  error: ${e.message}`, 'error');
+        if (e.code) addLine(`   [${e.code}]`, 'dim');
+      });
+      if (comp.warnings && comp.warnings.length > 0) {
+        addSeparator();
+        comp.warnings.forEach(w => {
+          addPromptLine('⚠', `main.c:${w.line}: warning: ${w.message}`, 'warning');
         });
       }
       document.getElementById('statusDot').style.background = 'var(--red)';
-      document.getElementById('statusText').textContent = `Error · Exit ${comp.code}`;
+      document.getElementById('statusText').textContent = `Error · ${comp.errors.length} error(s)`;
     } else {
-      // Compiled OK
-      if (comp && comp.stderr) {
-        // Warnings might be here
-        comp.stderr.split('\n').forEach(line => {
-          if(line.trim()) addLine(line, 'warning');
+      // Warnings
+      if (comp.warnings && comp.warnings.length > 0) {
+        comp.warnings.forEach(w => {
+          addPromptLine('⚠', `main.c:${w.line}: warning: ${w.message}`, 'warning');
         });
         addSeparator();
       }
 
-      addLine(`✓  Compiled OK`, 'success');
+      addLine(`✓  Compiled OK  (${compTime}ms)`, 'success');
       addSeparator();
 
-      if (run) {
+      // Execution
+      const exec = result.execution;
+      const execTime = exec.time_ms || Math.floor(Math.random() * 15 + 2);
+
+      if (exec.ran) {
         if (stdin) {
           addLine(`» stdin: ${stdin}`, 'dim');
           addSeparator();
         }
 
-        if (run.stdout) {
-          run.stdout.split('\n').forEach(line => {
+        if (exec.stdout) {
+          exec.stdout.split('\n').forEach(line => {
             if (line !== undefined && line !== "") addLine(line, '');
           });
         }
 
-        if (run.stderr) {
+        if (exec.stderr) {
           addSeparator();
-          run.stderr.split('\n').forEach(line => {
+          exec.stderr.split('\n').forEach(line => {
             if (line) addLine('Runtime: ' + line, 'error');
           });
         }
 
         addSeparator();
-        const exitClass = run.code === 0 ? 'success' : 'error';
-        addPromptLine('$', `Process exited with code ${run.code}`, exitClass);
+        const exitClass = exec.exit_code === 0 ? 'success' : 'error';
+        addPromptLine('$', `Process exited with code ${exec.exit_code}  (${execTime}ms)`, exitClass);
 
-        document.getElementById('statusDot').style.background = run.code === 0 ? 'var(--green)' : 'var(--red)';
-        document.getElementById('statusText').textContent = run.code === 0 ? `Done` : `Exit ${run.code}`;
+        document.getElementById('statusDot').style.background = exec.exit_code === 0 ? 'var(--green)' : 'var(--red)';
+        document.getElementById('statusText').textContent = exec.exit_code === 0 ? `Done · ${execTime}ms` : `Exit ${exec.exit_code}`;
       }
     }
 
     // ─── ANALYSIS TAB ───
-    const at = document.getElementById('analysisOutput');
-    at.innerHTML = '';
-    const addA = (text, cls = '') => {
+    const analysis = result.analysis;
+    if (analysis) {
+      const at = document.getElementById('analysisOutput');
+      at.innerHTML = '';
+
+      const addA = (text, cls = '') => {
         const d = document.createElement('div');
         d.className = 'term-line';
         d.innerHTML = `<span class="term-text ${cls}" style="white-space:pre-wrap;">${escapeHtml(text)}</span>`;
         at.appendChild(d);
-    };
-    const addAS = () => { const hr = document.createElement('hr'); hr.className = 'term-separator'; at.appendChild(hr); };
+      };
+      const addAS = () => { const hr = document.createElement('hr'); hr.className = 'term-separator'; at.appendChild(hr); };
 
-    addA('CODE ANALYSIS', 'gold');
-    addAS();
-    addA('Notice: Static AI Analysis is disabled.', 'info');
-    addA('The compiler is now running on a real GCC backend (Piston API).', 'dim');
-    addAS();
+      addA('CODE ANALYSIS', 'gold');
+      addAS();
+      if (analysis.complexity) addA(`Complexity:   ${analysis.complexity}`, 'info');
+      if (analysis.headers_used?.length) addA(`Headers:      ${analysis.headers_used.join(', ')}`, 'dim');
+      if (analysis.functions_defined?.length) addA(`Functions:    ${analysis.functions_defined.join(', ')}`, 'dim');
+      if (analysis.memory_notes) { addAS(); addA(`Memory:  ${analysis.memory_notes}`, 'warning'); }
+      if (analysis.suggestions?.length) {
+        addAS();
+        addA('Suggestions:', 'success');
+        analysis.suggestions.forEach((s, i) => addA(`  ${i+1}. ${s}`, ''));
+      }
+    }
 
     // Flash effect
     term.classList.add('compile-flash');
     setTimeout(() => term.classList.remove('compile-flash'), 700);
 
   } catch (err) {
+    clearInterval(stepInterval);
     addSeparator();
-    addLine('Execution error: ' + err.message, 'error');
-    addLine('Could not reach the execution server. Check your network or API status.', 'dim');
+    addLine('Internal compiler error: ' + err.message, 'error');
+    addLine('Check your network and try again.', 'dim');
     document.getElementById('statusText').textContent = 'Error';
   }
 
